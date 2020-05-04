@@ -14,6 +14,7 @@ VERBOSE=${VERBOSE:=}
 PING_OPTS=${PING_OPTS:=-c3 -q}
 NSUPDATE_OPTS=${NSUPDATE_OPTS:=}
 
+AWK=${AWK:=/usr/bin/awk}
 HOST=${HOST:=/usr/bin/host}
 IP=${IP:=/sbin/ip}
 JQ=${JQ:=/usr/bin/jq}
@@ -37,6 +38,7 @@ function check_prereq {
   fi
 }
 
+check_prereq awk      "${AWK}"
 check_prereq host     "${HOST}"
 check_prereq ip       "${IP}"
 check_prereq jq       "${JQ}"
@@ -80,7 +82,7 @@ if [ $? -gt 0 -o -z "${MY_V4ADDR}" ]; then
   exit 2
 fi
 
-CURR_V4ADDR=`host "${NAME}" "${MASTER}" | grep "${NAME} has address " | awk '{ print $4 }'`
+CURR_V4ADDR=`host "${NAME}" "${MASTER}" | grep "${NAME} has address " | ${AWK} '{ print $4 }'`
 
 if [ $? -eq 0 -a "${MY_V4ADDR}" == "${CURR_V4ADDR}" ]; then
   [ ! -z "${VERBOSE}" ] && echo "No updates required at this time"

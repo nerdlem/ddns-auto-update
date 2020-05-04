@@ -6,6 +6,7 @@ Simply place the accompanying script in `/usr/local/bin` and tweak the enclosed 
 
 This scripts depends on the following commands being available:
 
+* awk
 * host
 * ip
 * jq
