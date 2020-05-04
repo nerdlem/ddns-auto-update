@@ -1,0 +1,14 @@
+# Make sure to set suitable values for the variables below
+#
+# MASTER: the IP or name of the DNS name server where dynamic updates need
+# to be sent by the client.
+#
+# IFACE: The name of the interface from where the IP address is to be taken.
+#
+# DDNSKEY: Points to a suitable DDNS key to use. Look at the -k option in the
+# documentation of the nsupdate command for suitable files to point using this
+# variable.
+#
+# NAME: The DNS FQDN to update with the IP address of this host.
+
+*/5 * * * * pi MASTER= IFACE= DDNSKEY= NAME= /usr/local/bin/ddns-update 2>&1 | logger -t ddns-update

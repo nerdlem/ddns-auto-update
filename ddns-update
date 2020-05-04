@@ -1,0 +1,103 @@
+#!/bin/bash
+
+set -e
+
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+IFACE=${IFACE:=eth0}
+DDNSKEY=${DDNSKEY:=}
+MASTER=${MASTER:=}
+NAME=${NAME:=}
+TTL=${TTL:=300}
+VERBOSE=${VERBOSE:=}
+
+PING_OPTS=${PING_OPTS:=-c3 -q}
+NSUPDATE_OPTS=${NSUPDATE_OPTS:=}
+
+HOST=${HOST:=/usr/bin/host}
+IP=${IP:=/sbin/ip}
+JQ=${JQ:=/usr/bin/jq}
+NSUPDATE=${NSUPDATE:=/usr/bin/nsupdate}
+PING=${PING:=/bin/ping}
+
+function check_prereq {
+  tool=$1
+  binary=$2
+  msg=$3
+
+  if [ ! -x "${binary}" ]; then
+    echo ${tool} missing
+    if [ "${msg}" = "" ]; then
+      echo "  Please install ${binary} or provide its location via environment variables"
+    else
+      echo "  ${msg}"
+    fi
+
+    missing=1
+  fi
+}
+
+check_prereq host     "${HOST}"
+check_prereq ip       "${IP}"
+check_prereq jq       "${JQ}"
+check_prereq nsupdate "${NSUPDATE}"
+check_prereq ping     "${PING}"
+
+if [ "${missing}" != "" ]; then
+  echo "Missing prerequisites prevent execution. Please correct the issue."
+  exit 2
+fi
+
+if [ -z "${DDNSKEY}" -o ! -f "${DDNSKEY}" -o ! -s "${DDNSKEY}" ]; then
+  echo "Please use env variable DDNSKEY to specify the TSIG key to use for NS updates"
+  exit 1
+fi
+
+if [ -z "${IFACE}" ]; then
+  echo "Please use env variable IFACE to specify the TSIG key to use for NS updates"
+  exit 1
+fi
+
+if [ -z "${NAME}" ]; then
+  echo "Place the desired DNS FQDN for this host in the NAME env variable"
+  exit 1
+fi
+
+if [ -z "${TTL}" ]; then
+  echo "Place the desired DNS TTL for this host in the TTL env variable"
+  exit 1
+fi
+
+if ! "${PING}" ${PING_OPTS} "${MASTER}" > /dev/null; then
+  [ ! -z "${VERBOSE}" ] && echo "Ping to ${MASTER} failed"
+  exit 3
+fi
+
+MY_V4ADDR=`ip --json addr | jq ".[] | select(.ifname == \"${IFACE}\") | .addr_info | .[] | select(.family == \"inet\") | .local" | tr -cd .0-9`
+
+if [ $? -gt 0 -o -z "${MY_V4ADDR}" ]; then
+  echo "Failed to obtain local IP address for interface ${IFACE}"
+  exit 2
+fi
+
+CURR_V4ADDR=`host "${NAME}" "${MASTER}" | grep "${NAME} has address " | awk '{ print $4 }'`
+
+if [ $? -eq 0 -a "${MY_V4ADDR}" == "${CURR_V4ADDR}" ]; then
+  [ ! -z "${VERBOSE}" ] && echo "No updates required at this time"
+  exit 0
+fi
+
+${NSUPDATE} ${NSUPDATE_OPTS} -k "${DDNSKEY}" <<__NSUPDATE__
+server ${MASTER}
+update del ${NAME} A
+update add ${NAME} ${TTL} A ${MY_V4ADDR}
+send
+__NSUPDATE__
+
+if [ $? -gt 0 ]; then
+  echo "Dynamic update of ${NAME} with address ${MY_V4ADDR} failed"
+  exit 2
+fi
+
+[ ! -z "${VERBOSE}" ] && echo Address ${MY_V4ADDR} from ${IFACE} was set using TSIG key ${DDNSKEY}
+exit 0
